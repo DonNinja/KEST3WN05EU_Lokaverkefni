@@ -1,0 +1,41 @@
+$notendur = Import-Csv .\lokaverk_notendur.csv
+$notendanofnNem = @()
+ foreach ($n in $notendur) {
+    $tala = 1
+    $NameLength = $n.Nafn.Length
+    
+    $Name = $n.Nafn.Split(" ") |Select-Object -First 5
+    
+    $Name
+    
+    $FName = $n.Nafn.Split(" ") | Select-Object -First ($Name.Count - 1)
+
+    $fylki = @()
+    $fylki += $FName
+    if ($fylki.Length -ge 2){
+        $FFName = $fylki[0]
+     }  
+    
+    $Lname = $n.Nafn.Split(" ") | Select-Object -Last 1
+
+    $Lname
+    if ($n.Hlutverk -eq "Nemendur") {
+        $notendanafnNem = ($FFName[0] + $FFName[1] + $Lname[0] + $Lname[1] + $tala).ToLower()
+        if ($notendanafnNem -in $notendanofnNem){
+            $k = $true
+            while ($true) {
+                $tala += 1
+                $notendanafnNem = ($FFName[0] + $FFName[1] + $Lname[0] + $Lname[1] + $tala).ToLower()
+                if ($notendanafnNem -notin $notendanofnNem){
+                    break
+                }
+            }
+        }
+        $notendanofnNem += $notendanafnNem
+    }
+}
+
+$Name
+$FName
+$Mname
+$Lname
