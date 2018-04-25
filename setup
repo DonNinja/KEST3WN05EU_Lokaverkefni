@@ -1,0 +1,32 @@
+function FinnaNafnNetkortsMedIpTolu {
+    param(
+        [Parameter(Mandatory=$true, HelpMessage="Write the ip address of the Net Adapter you want to change")]
+        [string]$IPTala
+    )
+    (Get-NetIPAddress -IP $IPTala | Get-NetAdapter).Name
+    if (!(Get-NetIPAddress -IP $IPTala | Get-NetAdapter).Name) {
+        $NKort = Write-Error -Message "FinnaNafnNetkortsMedIpTolu fann ekki netkort með ip tölu $IPTala"
+    }
+    else {
+        $NKort = (Get-NetIPAddress -IP $IPTala | Get-NetAdapter).Name
+    }
+}
+
+$NKort = FinnaNafnNetkortsMedIpTolu -IPTala "169.254.*"
+$NKort
+
+# IP stillingar
+Rename-NetAdapter -Name $NKort -NewName "LAN"
+New-NetIPAddress -InterfaceAlias LAN -IPAddress 172.16.16.0 -PrefixLength 21
+Set-DnsClientServerAddress -InterfaceAlias LAN -ServerAddresses 127.0.0.1
+
+# Setja inn ADDS role
+Install-WindowsFeature -Name ad-domain-services -IncludeManagementTools
+# Setja upp domain controllerinn
+Install-ADDSForest -DomainName hrangvi.local -InstallDns -SafeModeAdministratorPassword (ConvertTo-SecureString -AsPlainText "pass.123" -Force)
+
+# setja inn DHCP role
+Install-WindowsFeature -Name DHCP -IncludeManagementTools
+Add-DhcpServerv4Scope -Name scope1 -StartRange 172.16.16.1 -EndRange 172.16.23.217 -SubnetMask 255.255.248.0
+Set-DhcpServerv4OptionValue -DnsServer 172.16.16.2 -Router 172.16.16.2
+Add-DhcpServerInDC -DnsName $($env:COMPUTERNAME + "." + $env:USERDNSDOMAIN)
