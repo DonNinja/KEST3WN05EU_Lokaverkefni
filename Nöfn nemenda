@@ -1,41 +1,129 @@
+#Finna Domain: $env:USERDNSDOMAIN
+
+New-ADOrganizationalUnit -Name Notendur -ProtectedFromAccidentalDeletion $false
+$grunnOUPath = (Get-ADOrganizationalUnit -Filter { name -like 'Notendur' }).DistinguishedName
+New-ADGroup -Name NotendurGRP -Path $grunnOUPath -GroupScope Global
 $notendur = Import-Csv .\lokaverk_notendur.csv
-$notendanofnNem = @()
- foreach ($n in $notendur) {
-    $tala = 1
-    $NameLength = $n.Nafn.Length
-    
-    $Name = $n.Nafn.Split(" ") |Select-Object -First 5
-    
-    $Name
-    
-    $FName = $n.Nafn.Split(" ") | Select-Object -First ($Name.Count - 1)
+$OllNofn = @();
 
-    $fylki = @()
-    $fylki += $FName
-    if ($fylki.Length -ge 2){
-        $FFName = $fylki[0]
-     }  
-    
-    $Lname = $n.Nafn.Split(" ") | Select-Object -Last 1
+foreach($n in $notendur){
+    $deild = $n.Hlutverk
+    if(-not(Get-ADOrganizationalUnit -Filter { name -like $deild })) {
+        New-ADOrganizationalUnit -Name $deild -path $grunnOUPath -ProtectedFromAccidentalDeletion $false
+        New-ADGroup -Name $deild -Path $("OU=" + $deild + "," + $grunnOUPath) -GroupScope Global
+        Add-ADGroupMember -Identity NotendurGRP -Members $deild
+        #búa til möppu fyrir deild og share-a henni
+        new-item C:\gogn\$deild -ItemType Directory
+        $rettindi = Get-Acl -Path C:\gogn\$deild
+        $nyrettindi = New-Object System.Security.AccessControl.FileSystemAccessRule($($env:USERDOMAIN + "\" + $deild),"Modify","Allow")
+        $rettindi.AddAccessRule($nyrettindi)
+        Set-Acl -Path C:\gogn\$deild $rettindi
+        New-SmbShare -Name $deild -Path C:\gogn\$deild -FullAccess $env:USERDOMAIN\$deild, administrators
+    }
 
-    $Lname
-    if ($n.Hlutverk -eq "Nemendur") {
-        $notendanafnNem = ($FFName[0] + $FFName[1] + $Lname[0] + $Lname[1] + $tala).ToLower()
-        if ($notendanafnNem -in $notendanofnNem){
-            $k = $true
-            while ($true) {
-                $tala += 1
-                $notendanafnNem = ($FFName[0] + $FFName[1] + $Lname[0] + $Lname[1] + $tala).ToLower()
-                if ($notendanafnNem -notin $notendanofnNem){
-                    break
+
+        $tala = 1; 
+        $Name = $n.Nafn.Split(" ")  #| Select-Object -First 5;
+        $FNames = $n.Nafn.Split(" ") | Select-Object -First ($Name.Count - 1);
+        $FName = $n.Nafn.Split(" ") | Select-Object -First 1;
+        $LName = $n.Nafn.Split(" ") | Select-Object -Last 1;
+        $NafnFylki = @();
+        $samname = "";
+        $NafnFylki = $Name;
+        foreach($a in $NafnFylki) {
+
+            if($n.Hlutverk -eq "Kennarar"){
+                $KennJoinNofn = $NafnFylki -join "."
+                
+                foreach ($s in $KennJoinNofn) {
+                $s = $s.ToLower()
+                $s = $s -replace 'á','a'
+                $s = $s -replace 'ú','u'
+                $s = $s -replace 'ð','d'
+                $s = $s -replace 'í','i'
+                $s = $s -replace 'ó','o'
+                $s = $s -replace 'ú','u'
+                $s = $s -replace 'þ','th'
+                $s = $s -replace 'æ','ae'
+                $s = $s -replace 'ö','o'
+                $s = $s -replace 'ý','y'
+                $s = $s -replace 'é','e'
+
+                $samname += $s
+            }
+
+            $samname
+
+            if ($samname.Length -gt 20) {
+                $samname = $samname.Substring(0, 20);
+                if ($samname[20] -eq ".") {
+                    $samname = $samname.Substring(0, 18);
                 }
             }
+
+            if($n.Hlutverk -eq "Nemendur") {
+
+                $joinNafn = $NafnFylki -join " "
+
+                $isnafn = ""
+
+                foreach ($k in $joinNafn) {
+                    $k = $k -replace 'á','a'
+                    $k = $k -replace 'ú','u'
+                    $k = $k -replace 'ð','d'
+                    $k = $k -replace 'í','i'
+                    $k = $k -replace 'ó','o'
+                    $k = $k -replace 'ú','u'
+                    $k = $k -replace 'þ','th'
+                    $k = $k -replace 'æ','ae'
+                    $k = $k -replace 'ö','o'
+                    $k = $k -replace 'ý','y'
+                    $k = $k -replace 'é','e'
+
+                    $isnafn += $k
+                }
+
+                $FNameen = $isnafn.Split(" ") | Select-Object -First 1
+
+                $Lnameen = $isnafn.Split(" ") | Select-Object -Last 1
+
+                $FNameis = $n.Nafn.Split(" ") | Select-Object -First ($Name.Count - 1)
+
+                $Lnameis = $n.Nafn.Split(" ") | Select-Object -Last 1
+            }
         }
-        $notendanofnNem += $notendanafnNem
+                 if ($n.Hlutverk -eq "Nemendur") {
+                        $notendanafnNem = ($FNameen[0] + $FNameen[1] + $Lnameen[0] + $Lnameen[1] + $tala).ToLower()
+                    if ($notendanafnNem -in $OllNofn){            
+                    $k = $true
+                    while ($true) {
+                        $tala += 1
+                        $notendanafnNem = ($FNameen[0] + $FNameen[1] + $Lnameen[0] + $Lnameen[1] + $tala).ToLower()
+                        if ($notendanafnNem -notin $OllNofn){
+                            break
+                        }
+            }
+                    }
+                    $samname += $notendanafnNem
+                    $OllNofn += $notendanafnNem
+                                    }
+
+                    $notandi = @{
+                        'Name'=$n.Nafn;
+                        'DisplayName'=$n.Nafn;
+                        'Title'=$n.Hlutverk;
+                        'GivenName'=$FNames;
+                        'Surname'=$Lname;
+                        'SamAccountName'=$samname;
+                        'Department'=$n.Skoli;
+                        'UserPrincipalName'=$($samname + "@" + $env:USERDNSDOMAIN);
+                        'Path'=$("OU=" + $n.Hlutverk + "," + $grunnOUPath);
+                        'AccountPassword'=(ConvertTo-SecureString -AsPlainText "pass.123" -Force);
+                        'Enabled'=$true;
+                    }
+
+    New-ADUser @notandi
+    
+    Add-ADGroupMember -Identity $deild -Members $samname
     }
 }
-
-$Name
-$FName
-$Mname
-$Lname
